@@ -16,18 +16,30 @@ struct que *que_create()
 		return NULL;
 	}
 	que_id->amount = 0;
+	
 	return que_id;
 }
 
-int que_push(struct que *que_id, int val)
+struct que_elem *que_create_elem()
 {
 	struct que_elem *new;
 	new = bad_malloc(sizeof(struct que_elem));
 	if(new == NULL)
     {
 		//printf("bad_malloc error\n");
-		return -1;
+		return NULL;
 	}
+	
+	return new;
+}
+
+int que_push(struct que *que_id, int val)
+{
+	struct que_elem *new;
+	new = que_create_elem();
+	if(new == NULL)
+		return -1;
+
 	if(que_id->amount == 0)
 	{
 		que_id->head = new;
@@ -39,7 +51,13 @@ int que_push(struct que *que_id, int val)
 	que_id->tail = new;
     new->val = val;
 	que_id->amount++;
+	
 	return 0;
+}
+
+void que_rm_elem(struct que_elem *elem)
+{
+	free(elem);
 }
 
 int que_pop(struct que *que_id, int *val)
@@ -49,12 +67,15 @@ int que_pop(struct que *que_id, int *val)
 		//printf("que is empty\n");
 		return -1;
 	}
-	*val = que_id->head->val;
-    struct que_elem *poped;
+	struct que_elem *poped;
     poped = que_id->head;
+	
+	*val = poped->val;
     que_id->head = poped->next;
-    free(poped);
+    
+    que_rm_elem(poped);
     que_id->amount--;
+    
     return 0;
 
 }

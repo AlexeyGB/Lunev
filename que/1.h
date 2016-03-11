@@ -25,6 +25,12 @@ void *bad_malloc(size_t size);
 struct que *que_create();
 /* returns NULL if malloc error, else returns queue's pointer */
 
+struct que_elem *que_create_elem();
+/* returns pointer to new que's element*/
+
+void que_rm_elem(struct que_elem *elem);
+/* returns nothing */
+
 int que_push(struct que *que_id, int val);
 /* returns -1 if malloc error, else returns 0 */
 
