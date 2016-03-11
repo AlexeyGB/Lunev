@@ -17,15 +17,15 @@ pid_t pid;
 
 void one(int signo)
 {
-  write_char = write_char + digit;
+  write_char = write_char + digit; // <- cr section from here
   digit = digit / 2;
-  kill(pid, SIGUSR1);
+  kill(pid, SIGUSR1); // <- cr section to here
 }
 
 void zero(int signo)
 {
-  digit = digit / 2;
-  kill(pid, SIGUSR1);
+  digit = digit / 2; // <- cr section from here
+  kill(pid, SIGUSR1); // <- cr section to here
 }
 
 void child_died(int signo)
@@ -84,7 +84,10 @@ int main(int argc, char *argv[])
   sigaddset(&set, SIGUSR1);
   sigaddset(&set, SIGUSR2);
   sigprocmask(SIG_BLOCK, &set, NULL);
-  sigemptyset(&set);
+  // <- cr section from here to the end
+  sigemptyset(&set);  
+
+
   //set *set to full\SIGUSR1, SIGUSR2, SIGCHLD, SIGALRM
   sigfillset(&set);
   sigdelset(&set, SIGUSR1);
@@ -129,8 +132,9 @@ int main(int argc, char *argv[])
     int i;
     while(read(fd, &read_char, 1) > 0)
     {
-    	for(i = 128; i > 0; i = i / 2)
-    	{
+      for(i = 128; i > 0; i = i / 2)
+    	{ // <- cr section from here
+
     		//bit is 1
      		if(read_char & i)
      		{
@@ -142,9 +146,10 @@ int main(int argc, char *argv[])
     			kill(ppid, SIGUSR2);
      		}
      		//wait for parent's signal
-     		alarm(1);
+     		alarm(1);   
+        // <- cr section to here
         sigsuspend(&set);
-      }
+      } 
     }
       
     //ending
@@ -159,7 +164,7 @@ int main(int argc, char *argv[])
     
     //recieving and writing
     while(1)
-    {  
+    {  // <- cr section from here
     	if(digit == 0)
      	{
     		write(1, &write_char, 1);
@@ -168,6 +173,7 @@ int main(int argc, char *argv[])
      		write_char = 0;
      	}
      	//wait for child's signal
+      // <- cr section to here
       sigsuspend(&set);
     }
 
