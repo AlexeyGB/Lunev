@@ -9,4 +9,7 @@ a.out: 1.o
 clear:
 	rm *.o *.out
 
+leha: 
+	gcc leha.c -lm -g -o a.out
+
 .PHONY: all clear

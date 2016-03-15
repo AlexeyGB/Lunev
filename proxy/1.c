@@ -11,7 +11,6 @@
 #include <sys/signal.h>
 #include <assert.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <string.h>
 
 #define PIPE_SIZE 65536
@@ -21,6 +20,7 @@ struct child_t
 	int num; //num from 0 to child_amount - 1
 	int first; // if child is first
 	int last; // if child is last
+	char *file; // name of file to read from (only for 1st child)
 
     // fds for child
 	int read_fd; 
@@ -80,6 +80,7 @@ int main( int argc, char *argv[] )
 		if( i == child_amount - 1)
 		{
 			children[i].last = 1;
+			children[i].file = NULL;		
 			children[i].prnt_write_fd = -1;
 		}
 		else
@@ -88,6 +89,7 @@ int main( int argc, char *argv[] )
 		if( i != 0 )
 		{
 			children[i].first = 0;
+			children[i].file = NULL;
 
 			if( pipe( pipe_fds ) == -1 )
 			{
@@ -108,6 +110,7 @@ int main( int argc, char *argv[] )
 		{
 			children[i].first = 1;
 			children[i].read_fd = -1;
+			children[i].file = argv[2];
 		}
 
 		if( pipe( pipe_fds ) == -1 )
@@ -130,20 +133,20 @@ int main( int argc, char *argv[] )
 	pid_t pid;
 	for( i = 0; i < child_amount; i++ )
 	{
-		if( pid = fork() == -1 )
+		pid = fork();
+		if( pid == -1 )
 		{
 			perror("fork");
 			exit( EXIT_FAILURE );
 		}
-
+		
 		//child
 		if( pid == 0 )
 		{
 			//close unused fds
 			for( j = 0; j < child_amount; j++ )
 			{
-				printf("\ni = %d\n", i);
-				close(children[j].prnt_read_fd);
+				 close(children[j].prnt_read_fd);
 				if( j != child_amount - 1)
 					close(children[j].prnt_write_fd);
 				
@@ -156,22 +159,20 @@ int main( int argc, char *argv[] )
 			}
 
 			//start work
-			childStartTransmiting( &children[i], );
-			break;
-		}
-
-		//parent
-		else
-		{
-			//close unused fds
-			if( i != 0)
-				close(children[i].read_fd);
-			close(children[i].write_fd);
+			childStartTransmiting( &children[i] );
 			break;
 		}
 	}
 
-	//parent
+	// parent
+	
+	//close unused fds
+	for( i = 0; i < child_amount; i++)
+	{
+		if( i != 0)
+			close(children[i].read_fd);
+		close(children[i].write_fd);
+	}
 	// read and write fds
 	fd_set read_fds;
 	fd_set write_fds;
@@ -190,7 +191,7 @@ int main( int argc, char *argv[] )
 	{
 		read_fds = read_fds_dflt;
 		write_fds = write_fds_dflt;
-		if( select( max_fd + 1, read_fds, write_fds, NULL, NULL ) == -1 )
+		if( select( max_fd + 1, &read_fds, &write_fds, NULL, NULL ) == -1 )
 		{
 			perror("select");
 			exit( EXIT_FAILURE );
@@ -271,7 +272,7 @@ struct buffer_t *getBufs( int child_amount )
 
 void freeBuf( struct buffer_t *buf )
 {
-	if( bufs == NULL )
+	if( buf == NULL )
 	{
 		assert(0);
 		exit( EXIT_FAILURE );
@@ -286,14 +287,15 @@ void childStartTransmiting( struct child_t *child )
 {
 	if( child == NULL )
 	{
-		assert(0);
+		assert(1);
 		exit(EXIT_FAILURE);
 	}
+	struct child_t child1 = *child;
 	int ret_val;
 	int write_fd, read_fd;
 	if( child->num == 0 )
 	{
-		read_fd = open( argv[2], O_RDONLY );
+		read_fd = open( child -> file, O_RDONLY );
 		if( read_fd == -1 )
 		{
 			perror("open file");
@@ -309,7 +311,7 @@ void childStartTransmiting( struct child_t *child )
 	write_fd = child->write_fd;
 	
 	char buf[PIPE_SIZE];
-
+	
 	while(1)
 	{
 		ret_val = read( read_fd, &buf, PIPE_SIZE );
@@ -355,7 +357,7 @@ void handleReadableFd( struct child_t *child, fd_set *read_fds,
 				close(  prnt_write_fd );
 				FD_CLR( prnt_read_fd, read_fds_dflt );
 				FD_CLR( prnt_write_fd, write_fds_dflt );
-				freeBuf( buf );
+				//freeBuf( buf );
 
 				return;	
 			}
@@ -388,7 +390,7 @@ void handleReadableFd( struct child_t *child, fd_set *read_fds,
 				close(  prnt_write_fd );
 				FD_CLR( prnt_read_fd, read_fds_dflt );
 				FD_CLR( prnt_write_fd, write_fds_dflt );
-				freeBuf( buf );
+				//freeBuf( buf );
 
 				return;	
 			}
@@ -403,9 +405,9 @@ void handleReadableFd( struct child_t *child, fd_set *read_fds,
 				close(  prnt_write_fd );
 				FD_CLR( prnt_read_fd, read_fds_dflt );
 				FD_CLR( prnt_write_fd, write_fds_dflt );
-				freeBuf( buf );
+				//freeBuf( buf );
 
-				return;
+				return;//
 			}
 
 			
@@ -424,7 +426,7 @@ void handleReadableFd( struct child_t *child, fd_set *read_fds,
 				close(  prnt_write_fd );
 				FD_CLR( prnt_read_fd, read_fds_dflt );
 				FD_CLR( prnt_write_fd, write_fds_dflt );
-				freeBuf( buf );
+				//freeBuf( buf );
 
 				return;	
 			}
@@ -459,7 +461,7 @@ void handleWriteableFd( struct child_t *child, fd_set *write_fds,
 		int ret_val;
 
 		if( buf -> filled >= PIPE_SIZE )
-			ret_val = write( prnt_write_fd, but -> buf, PIPE_SIZE );
+			ret_val = write( prnt_write_fd, buf -> buf, PIPE_SIZE );
 		else
 			ret_val = write( prnt_write_fd, buf -> buf, buf -> filled );
 
@@ -469,7 +471,7 @@ void handleWriteableFd( struct child_t *child, fd_set *write_fds,
 			close(  prnt_write_fd );
 			FD_CLR( prnt_read_fd, read_fds_dflt );
 			FD_CLR( prnt_write_fd, write_fds_dflt );
-			freeBuf( buf );
+			//freeBuf( buf );
 			return;	
 		}
 		if( ret_val == -1 )
