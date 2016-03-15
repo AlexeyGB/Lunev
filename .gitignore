@@ -1,4 +1,4 @@
-# Object files
+﻿# Object files
 *.o
 *.ko
 *.obj
@@ -30,3 +30,6 @@
 
 # Debug files
 *.dSYM/
+
+# Local info files
+*.txt
