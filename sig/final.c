@@ -145,9 +145,9 @@ int main(int argc, char *argv[])
      		{
     			kill(ppid, SIGUSR2);
      		}
-     		//wait for parent's signal
+     		//wait for parent's signal   <- cr section2 to here
      		alarm(1);   
-        // <- cr section to here
+        // <- cr section to here     <- cr section2 from here
         sigsuspend(&set);
       } 
     }
