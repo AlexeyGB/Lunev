@@ -18,7 +18,7 @@
 
 struct child_t
 {
-	int child_num; //num from 0 to child_amount - 1
+	int num; //num from 0 to child_amount - 1
 	int first; // if child is first
 	int last; // if child is last
 
@@ -41,9 +41,18 @@ int getnum( char *str );
 
 struct buffer_t *getBufs( int child_amount );
 
-void freeBufs( struct buffer_t *bufs, int child_amount );
+void freeBuf( struct buffer_t *buf );
 
 void childStartTransmiting( struct child_t *child );
+
+void handleReadableFd( struct child_t *child, fd_set *read_fds, 
+					 fd_set *read_fds_dflt, fd_set *write_fds_dflt,
+					 struct buffer_t *buf);
+
+void handleWriteableFd( struct child_t *child, fd_set *write_fds, 
+					 fd_set *write_fds_dflt, fd_set *read_fds_dflt,
+					 struct buffer_t *buf);
+
 //---------------------------------------
 // MAIN PART
 
@@ -57,9 +66,6 @@ int main( int argc, char *argv[] )
 
 	int child_amount;
 	child_amount = getnum( argv[1] );
-    printf("%d\n", child_amount );
-	struct buffer_t *bufs;
-	bufs = getBufs( child_amount );
 
 	// config children's structures
 	// make fds between children and parent
@@ -70,11 +76,11 @@ int main( int argc, char *argv[] )
 	
 	for( i = 0; i < child_amount; i++ )
 	{
-		children[i].child_num = i;
+		children[i].num = i;
 		if( i == child_amount - 1)
 		{
 			children[i].last = 1;
-			children[i].prnt_write_fd = 1;
+			children[i].prnt_write_fd = -1;
 		}
 		else
 			children[i].last = 0;
@@ -96,21 +102,12 @@ int main( int argc, char *argv[] )
 
 			children[i].read_fd = pipe_fds[0];
 			children[i-1].prnt_write_fd = pipe_fds[1];
-			fcntl( children[i].prnt_write_fd, F_SETFL, O_NONBLOCK );
+			fcntl( children[i-1].prnt_write_fd, F_SETFL, O_NONBLOCK );
 		}
 		else
 		{
 			children[i].first = 1;
-			children[i].read_fd = open( argv[2], O_RDONLY );
-			if( children[i].read_fd == -1 )
-			{
-				perror("open file");
-				exit( EXIT_FAILURE );
-			}
-			if( children[i].read_fd == 0 )
-			{
-				exit( EXIT_FAILURE );
-			}
+			children[i].read_fd = -1;
 		}
 
 		if( pipe( pipe_fds ) == -1 )
@@ -119,7 +116,7 @@ int main( int argc, char *argv[] )
 			exit( EXIT_FAILURE );
 		}
 
-		if( pipe_fds[0] > max_fd )
+		if( pipe_fds[0] > max_fd ) 
 			max_fd = pipe_fds[0];
 		if( pipe_fds[1] > max_fd )
 			max_fd = pipe_fds[1];
@@ -129,7 +126,7 @@ int main( int argc, char *argv[] )
 		fcntl( children[i].prnt_read_fd, F_SETFL, O_NONBLOCK );  
 	}
 
-	//start forking
+	//start fororking
 	pid_t pid;
 	for( i = 0; i < child_amount; i++ )
 	{
@@ -143,27 +140,34 @@ int main( int argc, char *argv[] )
 		if( pid == 0 )
 		{
 			//close unused fds
-			for( j = 0; i < child_amount; j++ )
+			for( j = 0; j < child_amount; j++ )
 			{
+				printf("\ni = %d\n", i);
 				close(children[j].prnt_read_fd);
-				close(children[j].prnt_write_fd);
-				if( i != j )
+				if( j != child_amount - 1)
+					close(children[j].prnt_write_fd);
+				
+				if( j != i )
 				{
-					close(children[i].read_fd);
-					close(children[i].write_fd);
+					if( j != 0 )
+						close(children[j].read_fd);
+					close(children[j].write_fd);
 				}
 			}
 
 			//start work
-			childStartTransmiting( &children[i] );
+			childStartTransmiting( &children[i], );
+			break;
 		}
 
 		//parent
 		else
 		{
 			//close unused fds
-			close(children[i].read_fd);
+			if( i != 0)
+				close(children[i].read_fd);
 			close(children[i].write_fd);
+			break;
 		}
 	}
 
@@ -175,11 +179,34 @@ int main( int argc, char *argv[] )
 	fd_set read_fds_dflt;
 	fd_set write_fds_dflt;
 
-	FD_ZERO( read_fds_dflt );
-	FD_ZERO( write_fds_dflt );
-
+	FD_ZERO( &read_fds_dflt );
+	FD_ZERO( &write_fds_dflt );
 	for( i = 0; i < child_amount; i++ )
-		FD_SET( children[i].prnt_read_fd, read_fds_dflt );
+		FD_SET( children[i].prnt_read_fd, &read_fds_dflt );
+
+	struct buffer_t *bufs;
+	bufs = getBufs( child_amount );
+	while(1)
+	{
+		read_fds = read_fds_dflt;
+		write_fds = write_fds_dflt;
+		if( select( max_fd + 1, read_fds, write_fds, NULL, NULL ) == -1 )
+		{
+			perror("select");
+			exit( EXIT_FAILURE );
+		}
+
+		for( i = 0; i < child_amount; i++ )
+		{
+			handleReadableFd( &children[i], &read_fds, 
+							  &read_fds_dflt, &write_fds_dflt, &bufs[i]);
+
+			handleWriteableFd( &children[i], &write_fds,
+							   &write_fds_dflt, &read_fds_dflt, &bufs[i]);
+		}
+
+
+	}
 	
 
 
@@ -242,7 +269,7 @@ struct buffer_t *getBufs( int child_amount )
 	return bufs;
 }
 
-void freeBufs( struct buffer_t *bufs, int child_amount )
+void freeBuf( struct buffer_t *buf )
 {
 	if( bufs == NULL )
 	{
@@ -250,18 +277,9 @@ void freeBufs( struct buffer_t *bufs, int child_amount )
 		exit( EXIT_FAILURE );
 	}
 
-	if( child_amount <= 0 )
-	{
-		assert(0);
-		exit( EXIT_FAILURE );
-	}
-
-	int i;
-	for( i = 0; i< child_amount; i++ )
-	{
-		free( bufs[i].buf );
-	}
-	free( bufs );
+	free( buf -> buf );
+	
+	free( buf );
 }
 
 void childStartTransmiting( struct child_t *child )
@@ -273,9 +291,22 @@ void childStartTransmiting( struct child_t *child )
 	}
 	int ret_val;
 	int write_fd, read_fd;
-	
+	if( child->num == 0 )
+	{
+		read_fd = open( argv[2], O_RDONLY );
+		if( read_fd == -1 )
+		{
+			perror("open file");
+			exit( EXIT_FAILURE );
+		}
+		if( read_fd == 0 )
+		{
+			exit( EXIT_FAILURE );
+		}
+	}
+	else
+		read_fd = child->read_fd;
 	write_fd = child->write_fd;
-	read_fd = child->write_fd;
 	
 	char buf[PIPE_SIZE];
 
@@ -302,4 +333,168 @@ void childStartTransmiting( struct child_t *child )
 	close(write_fd);
 	close(read_fd);
 	exit( EXIT_SUCCESS );
+}
+
+void handleReadableFd( struct child_t *child, fd_set *read_fds, 
+					 fd_set *read_fds_dflt, fd_set *write_fds_dflt,
+					 struct buffer_t *buf)
+{
+	int prnt_read_fd = child -> prnt_read_fd;
+	int prnt_write_fd = child -> prnt_write_fd;
+
+	if( FD_ISSET( prnt_read_fd, read_fds ) )
+	{
+		int ret_val;
+		// last child
+		if( child -> last )
+		{
+			ret_val = read( prnt_read_fd, buf -> buf, buf -> size);
+			if( ret_val == -1 && errno == EAGAIN )
+			{
+				close(  prnt_read_fd );
+				close(  prnt_write_fd );
+				FD_CLR( prnt_read_fd, read_fds_dflt );
+				FD_CLR( prnt_write_fd, write_fds_dflt );
+				freeBuf( buf );
+
+				return;	
+			}
+			if( ret_val == -1 )
+			{
+				perror("parent read");
+				exit( EXIT_FAILURE );
+			}
+			if( ret_val == 0 )
+			{
+				exit( EXIT_SUCCESS );
+			}
+
+			write( 1, buf -> buf, ret_val);
+
+			return;
+		}
+
+		// buf is empty
+		if( buf -> filled == 0 )
+		{
+			if( buf -> size >= PIPE_SIZE )
+				ret_val = read( prnt_read_fd, buf -> buf, PIPE_SIZE );	
+			else
+				ret_val = read( prnt_read_fd, buf -> buf, buf -> size);
+			
+			if( ret_val == -1 && errno == EAGAIN )
+			{
+				close(  prnt_read_fd );
+				close(  prnt_write_fd );
+				FD_CLR( prnt_read_fd, read_fds_dflt );
+				FD_CLR( prnt_write_fd, write_fds_dflt );
+				freeBuf( buf );
+
+				return;	
+			}
+			if( ret_val == -1 )
+			{
+				perror("parent read");
+				exit( EXIT_FAILURE );
+			}
+			if( ret_val == 0 )
+			{
+				close(  prnt_read_fd );
+				close(  prnt_write_fd );
+				FD_CLR( prnt_read_fd, read_fds_dflt );
+				FD_CLR( prnt_write_fd, write_fds_dflt );
+				freeBuf( buf );
+
+				return;
+			}
+
+			
+		}
+		// buf isn't empty
+		else
+		{	
+			if( buf -> size - buf -> filled >= PIPE_SIZE )
+				ret_val = read( prnt_read_fd, buf -> buf, PIPE_SIZE );
+			else
+				ret_val = read( prnt_read_fd, buf -> buf, buf -> size - buf -> filled );
+			
+			if( ret_val == -1 && errno == EAGAIN )
+			{
+				close(  prnt_read_fd );
+				close(  prnt_write_fd );
+				FD_CLR( prnt_read_fd, read_fds_dflt );
+				FD_CLR( prnt_write_fd, write_fds_dflt );
+				freeBuf( buf );
+
+				return;	
+			}
+			if( ret_val == -1 )
+			{
+				perror("parent write");
+				exit( EXIT_FAILURE );
+			}
+			
+			if( ret_val == 0 )
+			{
+				FD_CLR( prnt_read_fd, read_fds_dflt );
+				return;
+			}
+		}
+
+		buf -> filled += ret_val;
+		FD_SET( prnt_write_fd, write_fds_dflt );
+	}
+
+}
+
+void handleWriteableFd( struct child_t *child, fd_set *write_fds, 
+					 fd_set *write_fds_dflt, fd_set *read_fds_dflt,
+					 struct buffer_t *buf)
+{
+	int prnt_read_fd = child -> prnt_read_fd;
+	int prnt_write_fd = child -> prnt_write_fd;
+
+	if( FD_ISSET( prnt_write_fd, write_fds ) )
+	{
+		int ret_val;
+
+		if( buf -> filled >= PIPE_SIZE )
+			ret_val = write( prnt_write_fd, but -> buf, PIPE_SIZE );
+		else
+			ret_val = write( prnt_write_fd, buf -> buf, buf -> filled );
+
+		if( ret_val == -1 && errno == EAGAIN )
+		{
+			close(  prnt_read_fd );
+			close(  prnt_write_fd );
+			FD_CLR( prnt_read_fd, read_fds_dflt );
+			FD_CLR( prnt_write_fd, write_fds_dflt );
+			freeBuf( buf );
+			return;	
+		}
+		if( ret_val == -1 )
+		{
+			perror("parent write");
+			exit( EXIT_FAILURE );
+		}
+		buf -> filled -= ret_val;
+
+		if( buf -> filled == 0 )
+		{
+			// buf is empty now
+			FD_CLR( prnt_write_fd, write_fds_dflt );
+		}
+		else
+		{
+			// some data is still in buf
+			int k;
+			char *offset_buf = buf -> buf + ret_val;
+			for( k = 0; k < buf -> filled; k++ )
+			{
+				buf -> buf[k] = offset_buf[k];
+			}
+		}
+		FD_SET( prnt_read_fd, read_fds_dflt );
+	}
+
 }
