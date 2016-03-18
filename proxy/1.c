@@ -290,7 +290,7 @@ void childStartTransmiting( struct child_t *child )
 		assert(1);
 		exit(EXIT_FAILURE);
 	}
-	struct child_t child1 = *child;
+
 	int ret_val;
 	int write_fd, read_fd;
 	if( child->num == 0 )
@@ -314,6 +314,7 @@ void childStartTransmiting( struct child_t *child )
 	
 	while(1)
 	{
+
 		ret_val = read( read_fd, &buf, PIPE_SIZE );
 		if( ret_val == 0 )
 			break;
@@ -333,6 +334,10 @@ void childStartTransmiting( struct child_t *child )
 		}
 	}
 	close(write_fd);
+			if( child -> num == 2 )
+			sleep(10);
+
+
 	close(read_fd);
 	exit( EXIT_SUCCESS );
 }
