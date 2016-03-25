@@ -4,27 +4,38 @@ void *bad_malloc(size_t size)
 {
 	if(malloc_error == 1) return NULL;
 	return malloc(size);
-}
+};
 
 //------------------------------------------------
 //iterator
 
-struct que_iterator get_begin( struct que *queue )
+int get_begin( struct que *queue, struct que_iterator *i )
 {
-	struct que_iterator iterator;
-	iterator.queue = queue;
-	iterator.current = queue -> begin;
-	iterator.position = 1;
-	return iterator;	
+	if( queue -> amount == 0 )
+		return -1;
+	i -> queue = queue;
+	i -> current = queue -> begin;
+	i -> position = 0;
+	return 1;	
 };
 
-struct que_iterator get_end( struct que *queue )
+/*struct que_iterator get_end( struct que *queue )
 {
-	struct que_iterator iterator;
-	iterator.queue = queue;
-	iterator.current = queue -> end;
-	iterator.position = queue -> amount;
-	return iterator;
+	struct que_iterator i;
+	i.queue = queue;
+	i.current = queue -> end;
+	i.position = queue -> amount -1;
+	return i;
+};*/
+
+int cmp_with_end( struct que_iterator i )
+{
+	if ( i.queue -> amount - 1 == i.position )
+		return 0;
+	else if( i.queue->amount - 1 > i.position )
+		return 1;
+	else 
+		return -1;
 };
 
 int get_val( struct que_iterator i )
@@ -40,24 +51,25 @@ int get_pos( struct que_iterator i )
 	pos = i.position;
 	return pos;
 };
-// TODO
+
 void incr_iterator( struct que_iterator *i )
 {
 	struct que_elem *next;
 	next = i -> current -> next;
 	i -> current = next;
+	i->position++;
 	return;
 };
 
-int diff_iterator( struct que_iterator i1, struct que_iterator i2 )
+/*int equal_iterator( struct que_iterator i1, struct que_iterator i2 )
 {
-	if( i1.position > i2.position )
+//	if( i1.position == -1 || i2.position == -1 )
+//		retunr -1;
+	if( i1.position == i2.position )
 		return 1;
-	else if( i1.position == i2.position )
-		return 0;
 	else 
-		return -1;
-}
+		return 0;
+};*/
 
 //------------------------------------------------
 
@@ -73,7 +85,7 @@ struct que *que_create()
 	que_id->amount = 0;
 	
 	return que_id;
-}
+};
 
 struct que_elem *que_create_elem()
 {
@@ -86,7 +98,7 @@ struct que_elem *que_create_elem()
 	}
 	
 	return new;
-}
+};
 
 int que_push(struct que *que_id, int val)
 {
@@ -108,12 +120,12 @@ int que_push(struct que *que_id, int val)
 	que_id->amount++;
 	
 	return 0;
-}
+};
 
 void que_rm_elem(struct que_elem *elem)
 {
 	free(elem);
-}
+};
 
 int que_pop(struct que *que_id, int *val)
 {
@@ -133,17 +145,18 @@ int que_pop(struct que *que_id, int *val)
     
     return 0;
 
-}
+};
+
 int que_size(struct que *que_id)
 {
 	return que_id->amount;
-}
+};
 
 int que_empty(struct que *que_id)
 {
 	if(que_id->amount) return 0;
 	return 1;
-}
+};
 
 void que_rm(struct que *que_id)
 {
@@ -155,4 +168,4 @@ void que_rm(struct que *que_id)
 		free(del);
 	}
 	free(que_id);
-}
+};

@@ -20,6 +20,6 @@ gcov:
 	gcc $(SOURCES) -g -fprofile-arcs -ftest-coverage -o $(EXCECUTABLE)
 
 clear: 
-	rm *.o *.out *.gcov *.gcda *.gcno
+	rm *.out *.gcov *.gcda *.gcno
 
 .PHONY: all clear gcov

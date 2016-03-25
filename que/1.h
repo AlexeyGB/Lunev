@@ -34,9 +34,7 @@ struct que_iterator
 	int position;
 };
 
-struct que_iterator get_begin( struct que *queue );
-
-struct que_iterator get_end( struct que *queue );
+int get_begin( struct que *queue, struct que_iterator *i );
 
 int get_val( struct que_iterator i );
 /* returns value of current element */
@@ -47,8 +45,11 @@ int get_pos( struct que_iterator i );
 void incr_iterator( struct que_iterator *i );
 /* returns incremented iterator */
 
-int diff_iterator( struct que_iterator i1, struct que_iterator i2 );
-/* returns 1 if i1 > i2, 0 if i1 == i1, -1 if i1 < i2 */
+int cmp_with_end( struct que_iterator i );
+/* returns 0 if i equal to end, 1 if i < end, -1 if i > end */
+
+//int equal_iterator( struct que_iterator i1, struct que_iterator i2 );
+/* returns 1 if i1 = i2, else 0 */
 
 //----------------------------------------------------
 
