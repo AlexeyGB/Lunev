@@ -49,7 +49,7 @@ int main( int argc , char * argv[] )
 	max_time = result.exp_time;
 	min_time = result.exp_time;
 	ave_time += result.exp_time;
-	printf( "\n---- %d ----\nresult = %g\nexp_time = %ld\n", 1, result.integr_val, result.exp_time ); 
+	//printf( "\n---- %d ----\nresult = %g\nexp_time = %ld\n", 1, result.integr_val, result.exp_time ); 
 	
 
 	for( int i = 2; i <= starts_num; i++ )
@@ -102,8 +102,8 @@ double calculate( double x1, double x2, int seg_amount )
 double f( double x )
 {
 	double f;
-	//f = x*x*x;
-	f = pow( 2, x) * sin( pow( 2, -x) );
+	f = x*x*x;
+	//f = pow( 2, x) * sin( pow( 2, -x) );
 	return f;
 };
 
