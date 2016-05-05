@@ -1,0 +1,22 @@
+CC = g++
+CFLAGS = -std=c++11 -std=c++14 -g -Wall -Werror -o2 -pthread -lpthread
+LFLAGS = -lgcov --coverage
+SOURCES = 2.cpp
+OBJECTS = $(SOURCES:.c=.o)
+HEADERS = 
+EXCECUTABLE = a.out
+
+all: $(EXCECUTABLE)
+
+$(EXCECUTABLE): $(OBJECTS) 
+	$(CC) $^ -std=c++11 -std=c++14 -g -Wall -Werror -o2 -pthread -lpthread -o  $@
+
+$(OBJECTS): $(HEADERS) Makefile
+
+.cpp: .o
+	$(CC) $^  -std=c++11 -std=c++14 -g -Wall -Werror -o2 -pthread -lpthread -o   $@
+
+clear: 
+	rm *.out *.o
+
+.PHONY: all clear gcov
