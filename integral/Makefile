@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -Werror -o2
 LFLAGS = -lgcov --coverage
-SOURCES = 5.c  
+SOURCES = final.c  
 OBJECTS = $(SOURCES:.c=.o)
 HEADERS = 
 EXCECUTABLE = a.out

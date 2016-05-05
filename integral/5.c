@@ -77,7 +77,7 @@ int startCalculations( double from, double to, int threads_amount )
 
   	double result = 0;
   	void *thr_result;
-
+  	
     //wait for threads
 	for( int i = 0; i < threads_amount; i++)
 	{
