@@ -100,7 +100,7 @@ double calculate( double from, double to, double delta )
 	
 	/*broadcast notification*/
 	struct in_addr myIP = getIP();
-	if( sendto( udp_socket, &myIP, sizeof(myIP), /*0*/0, (struct sockaddr *) &si_other, sizeof(si_other) ) == -1 )
+	if( sendto( udp_socket, &myIP, sizeof(myIP), 0, (struct sockaddr *) &si_other, sizeof(si_other) ) == -1 )
 		handle_error("sendto");
 
 	close(udp_socket);

@@ -25,9 +25,6 @@
 #define handle_error(msg) \
     do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
-//debug
-#define kill()\
-    do { exit(EXIT_FAILURE); } while(0)
 
 void disconnect(int signo)
 {
@@ -115,17 +112,15 @@ int main( int argc, char * argv[] )
 	int keepalive = 1;
 	if( setsockopt( tcp_socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) == -1 )
 		handle_error("setsockopt"); 
-	
-
 	printf("connected\n");
-	//kill();//debug
+	
 	printf("\n**start sending**\n");
 	
 	/*send amount of threads to server*/
 	if( send(tcp_socket, &threads_amount, sizeof(threads_amount), 0) == -1 )
 		handle_error("send");
 	printf("send thr_num %d\n", threads_amount);
-printf("\n**start recieving**\n");
+    printf("\n**start recieving**\n");
 	
 	/*get task*/
 	int ret_val;
@@ -143,12 +138,12 @@ printf("\n**start recieving**\n");
 	double delta = task.delta;
 	double result;
 	result = calculate( threads_amount, from, to, delta );
-printf("\n**start sending**\n");
+	printf("\n**start sending**\n");
 	
 	/*send reslult back to server*/
 	if( send(tcp_socket, &result, sizeof(result), 0) == -1 )
 		handle_error("send");
-printf("sent result\n");
+	printf("sent result\n");
 	/*close connection*/
 	close(tcp_socket);
 	return 0;

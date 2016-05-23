@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,9 +13,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <ifaddrs.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <poll.h> 
 
 #define SLAVE_PORT 4000
 #define LISTEN_PORT 8000
@@ -32,13 +35,14 @@ struct slave_task
 	double from;
 	double to;
 	double delta;
+	int threads_amount; /*don't used in server app*/
 };
 
 struct in_addr getIP();
 
-void disconnect(int signo)
+void disconnect( int disconnected_slave_num )
 {
-	printf("disconnect\n");
+	printf("slave %d disconnected\n", disconnected_slave_num );
 	exit( EXIT_FAILURE );
 };
 
@@ -55,22 +59,25 @@ int main( int argc, char * argv[] )
 	result = calculate( from, to, delta );
 
 	printf( "\nresult = %g\n", result ); 
+	exit( EXIT_SUCCESS );
 	return 0;
 }
 
 double calculate( double from, double to, double delta )
 {
 	/*set action for SIGPIPE*/
-	struct sigaction act_disconnect;
+	/*struct sigaction act_disconnect;
   	memset(&act_disconnect, 0, sizeof(act_disconnect));
-  	act_disconnect.sa_handler = disconnect;
+  	act_disconnect.sa_handler = SIG_IGN;
   	sigfillset(&act_disconnect.sa_mask);
-  	sigaction( SIGPIPE, &act_disconnect, NULL );
+  	sigaction( SIGPIPE, &act_disconnect, NULL );*/
   	
 	/*create listen socket*/
 	int listen_socket;
 	if( ( listen_socket = socket( AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP ) )== -1 )
 		handle_error("socket");
+
+	/*make listen_socket listenable*/
 	struct sockaddr_in si_my;
 	memset( &si_my, 0, sizeof(si_my) );
 	si_my.sin_family = AF_INET;
@@ -88,7 +95,7 @@ double calculate( double from, double to, double delta )
 		handle_error("socket");
 	
 	struct sockaddr_in si_other;
-	for(int port = 4000; port < 4002; port++){//debug
+	for(int port = 4000; port < 4005; port++){//debug
 	//printf("port %d\n", port);
 	memset( &si_other, 0, sizeof(si_other) );
 	si_other.sin_family = AF_INET;
@@ -104,15 +111,13 @@ double calculate( double from, double to, double delta )
 	struct in_addr myIP = getIP();
 	if( sendto( udp_socket, &myIP, sizeof(myIP), /*0*/0, (struct sockaddr *) &si_other, sizeof(si_other) ) == -1 )
 		handle_error("sendto");
-
-	}
+	//printf("my IP %s\n", inet_ntoa(myIP));
+	}//debug
 	close(udp_socket);
 	printf("broadcast finished\n");
-	
 
 	/*listen for connections*/
 	int slaves_amount = 0;
-	int keepalive = 1;
 	int slaves_sockets[255];
 	clock_t startTime = clock();
 	clock_t currentTime = clock();
@@ -123,15 +128,33 @@ double calculate( double from, double to, double delta )
 				handle_error("accept");
 		
 		if( slaves_sockets[slaves_amount] != -1 )
-		{
-			if( setsockopt( slaves_sockets[slaves_amount], SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) == -1 )
-				handle_error("setsockopt"); 
+		{ 
 			slaves_amount++;
-			printf("connect\n");
+			printf("connected with %d\n", slaves_amount);
 		}
-
+	
 		currentTime = clock();
 	}
+	close(listen_socket);
+
+	/*set sockets unbreakable (KEEPALIVE)*/
+	for( int i = 0; i < slaves_amount; i++ )
+	{
+		int optval = 1;
+		if( setsockopt( slaves_sockets[i], SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) == -1 )
+			handle_error("setsockopt"); 
+		optval = 1;
+		if( setsockopt( slaves_sockets[i], IPPROTO_TCP, TCP_KEEPIDLE, &optval, sizeof(optval)) == -1 )
+			handle_error("setsockopt"); 
+		optval = 1;
+		if( setsockopt( slaves_sockets[i], IPPROTO_TCP, TCP_KEEPINTVL, &optval, sizeof(optval)) == -1 )
+			handle_error("setsockopt"); 
+		optval = 1;
+		if( setsockopt( slaves_sockets[i], IPPROTO_TCP, TCP_KEEPCNT, &optval, sizeof(optval)) == -1 )
+			handle_error("setsockopt");
+	}
+
+	printf("\n**start recieving**\n");
 	
 	/*get threads amount from each slave*/
 	int threads_amount = 0, threads_in_slave[255];
@@ -141,11 +164,11 @@ double calculate( double from, double to, double delta )
 		if( ( ret_val = recv( slaves_sockets[i], &threads_in_slave[i], sizeof(threads_in_slave[i]), MSG_WAITALL ) ) == -1 )
 			handle_error("recv");
 		if( ret_val < sizeof(threads_in_slave[i]) )
-			disconnect(0);
-		printf("recieved %d\n", threads_in_slave[i]);
+			disconnect(i+1);
+		printf("recieved from: %d thr_num: %d\n", i+1, threads_in_slave[i]);
 		threads_amount += threads_in_slave[i];
 	}
-
+	
 	/*set tasks*/
 	double part_length = (to - from) / threads_amount; 
 	struct slave_task *slaves_tasks = (struct slave_task*) malloc( sizeof(struct slave_task)*slaves_amount );
@@ -157,33 +180,63 @@ double calculate( double from, double to, double delta )
 		slaves_tasks[i].delta = delta;
 		_from += threads_in_slave[i]*part_length;
 	}
-
+	printf("\n**start sending**\n");
+	
 	/*send tasks*/
 	for( int i = 0; i < slaves_amount; i++ )
 	{
 		if( send( slaves_sockets[i], &slaves_tasks[i], sizeof(slaves_tasks[i]), 0) == -1 )
 			handle_error("send");
+		printf("send task to %d\n", i+1);
 	}
-
-	/*get for results*/
-	double result = 0;
-	double tmp_result;
+	printf("\n**start recieving**\n");
+	
+	/*wait for events and recv results*/
+	struct pollfd fds[255];
 	for( int i = 0; i < slaves_amount; i++ )
 	{
-		if( ( ret_val = recv( slaves_sockets[i], &tmp_result, sizeof(tmp_result), MSG_WAITALL ) ) == -1 )
-			handle_error("recv");
-		if( ret_val < sizeof(tmp_result) )
-			disconnect(0);
-		printf("recieved result from %d\n", i);
-		result += tmp_result;
-		close(slaves_sockets[i]);
+		fds[i].fd = slaves_sockets[i];
+		fds[i].events = POLLIN | POLLRDHUP;
+		fds[i].revents = 0;
 	}
-	
+
+	double result = 0;
+	double tmp_result;
+	nfds_t nfds = slaves_amount;
+	int wait_for_amount = slaves_amount;
+	while( wait_for_amount != 0 ) 
+	{
+		ret_val = poll( fds, nfds, -1 );
+		if( ret_val == -1 )
+			handle_error("poll");
+		for( int i = 0; i < slaves_amount && wait_for_amount != 0; i++ )
+		{
+			if( fds[i].revents != 0 )
+			{
+				if( fds[i].revents & POLLIN != 0 )
+				{	
+					if( ( ret_val = recv( slaves_sockets[i], &tmp_result, sizeof(tmp_result), MSG_WAITALL ) ) == -1 )
+						handle_error("recv");
+					if( ret_val < sizeof(tmp_result) )
+						disconnect(i+1);
+					printf("recieved result from %d\n", i+1);
+					result += tmp_result;
+					close(slaves_sockets[i]);
+					fds[i].fd = -1;
+					fds[i].revents = 0;
+					wait_for_amount--;
+				}
+				else if( fds[i].revents & POLLRDHUP != 0 )
+					disconnect(i+1);
+			}
+		}
+	}
 	return result;
 };
 
 
 struct in_addr getIP()
+
 {
     struct in_addr myIP;
     struct ifaddrs *ifAddrStruct = NULL;
@@ -204,4 +257,4 @@ struct in_addr getIP()
     if (ifAddrStruct != NULL)
         freeifaddrs(ifAddrStruct);
     return myIP;
-}
+};
