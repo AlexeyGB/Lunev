@@ -116,11 +116,11 @@ int main(int argc, char const *argv[])
 		max_servers = atoi(argv[1]);
 		if( max_servers < 1 )
 		{
-			fprintf(stdout, "Incorrect argument!\nShould be positive number: the amount of servers\n");
+			fprintf(stdout, "Incorrect argument!\nShould be one argument: positive amount of servers\n");
 			exit(EXIT_FAILURE);
 		}
 	}
-
+	printf("***Client started***\n");
 	double from = FROM;
 	double to = TO;
 	double delta = DELTA;
@@ -144,11 +144,10 @@ int main(int argc, char const *argv[])
 	char msg_snd[15];
 	memset( &msg_snd, 0, sizeof(char)*15 );
 	strcpy( msg_snd, "Hello, server!");
-
 	/*send broadcast request to servers*/
 	if( sendto(brcast_socket, &msg_snd, sizeof(char)*15, 0, (struct sockaddr *) &brcast_addr, sizeof(brcast_addr)) == -1 )
 		handle_cr_error("Sending brcast request failed");
-
+	printf("Broadcast request is sent\n");
 	struct pollfd fds;
 	fds.fd = brcast_socket;
 	fds.events = POLLIN;	
@@ -165,6 +164,7 @@ int main(int argc, char const *argv[])
 	int serv_addr_len = sizeof(struct sockaddr_in);
 
 	server_answer_t msg_rcv;
+	printf("Waiting for servers...\n");
 	while( poll( &fds, 1, POLL_TIMEOUT) > 0 )
 	{
 		int recv_bytes = recvfrom( brcast_socket, &msg_rcv, sizeof(msg_rcv), MSG_TRUNC, (struct sockaddr *) &servers[servers_amount].addr, &serv_addr_len );
@@ -189,11 +189,14 @@ int main(int argc, char const *argv[])
 	}
 	if( servers_amount < 1 )
 	{
-		fprintf(stdout, "No servers found!");
+		fprintf(stdout, "No servers were found!\n");
 		exit( EXIT_FAILURE);
 	}
+	else
+		printf("Found %d servers\n", servers_amount);
 
 	/*set tasks and start communicators*/
+	printf("Send tasks\n");
 	communicator_task_t *communicators_tasks = (communicator_task_t *) malloc( sizeof(communicator_task_t)*servers_amount );
 	if( communicators_tasks == NULL )
 		handle_cr_error("Malloc failed");
@@ -210,7 +213,7 @@ int main(int argc, char const *argv[])
 		if( pthread_create( &communicators_ids[i], NULL, communicator, (void *) &communicators_tasks[i]) == -1 )
 			handle_cr_error("Can't create thread");
 	}
-
+	printf("Waiting for results...\n");
 	/*wait for communicators threads and sum results*/
 	double result;
 	for( int i = 0; i < servers_amount; i++ )
@@ -219,7 +222,7 @@ int main(int argc, char const *argv[])
 		result += communicators_tasks[i].result;
 	}
 
-	fprintf(stdout, "result %g\n", result);
+	fprintf(stdout, "Result %g\n", result);
 
 	free(communicators_ids);
 	free(servers);

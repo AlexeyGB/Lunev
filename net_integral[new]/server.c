@@ -121,7 +121,7 @@ void *brcast_communicator( void *arg )
 			handle_cr_error("Recv from broadcast socket failed");
 		/*answer*/
 		if( rcv_size == 15 && strcmp( msg_rcv, "Hello, server!") == 0 && *may_answer == 1 )
-		{
+		{	
 			if( sendto( brcast_socket, &msg_snd, sizeof(msg_snd), 0, (struct sockaddr*) &client_addr, client_addr_len ) == -1 )
 				handle_cr_error("Sendto from broadcast socket");
 		}
@@ -177,7 +177,7 @@ int main( int argc, char *argv[] )
 		fprintf(stdout, "Incorrect thread's amount\n");
 		exit( EXIT_FAILURE );
 	} 
-
+	printf("***Server started***\n");
 	/*start thread to be answering to broadcast requests*/
 	int may_answer = 0; 
 	pthread_t broadcast_thr;
@@ -221,12 +221,13 @@ int main( int argc, char *argv[] )
 	memset( &client_socket_addr, 0, sizeof(client_socket_addr) );
 	while(1)
 	{
+		printf("Waiting for connections...\n");
 		flag = 1;
 		/*accept for connection*/
 		if( (client_socket = accept( listen_socket, (struct sockaddr *) &client_socket_addr, &addr_len )) == -1 )
 			handle_cr_error("Accept error");
 		may_answer = 0; // stop answering broadcast requests
-		
+		printf("Сonnection is established\n");
 		/*set KEEPALIVE flag*/
 		{
 			int optval = 1;
@@ -262,7 +263,7 @@ int main( int argc, char *argv[] )
 			flag = 0;
 			may_answer = 1;
 		}
-		
+		printf("Task recieved\nStart calculations...");
 		/*calculations*/
 		if( flag )
 		{
@@ -315,6 +316,7 @@ int main( int argc, char *argv[] )
 				double result;
 				for( int i = 0; i < slaves_amount; i++ )
 					result += slaves_tasks[i].result;
+				printf("Calculations finished\n");
 
 				pthread_cancel( checker_id );
 				/*send result*/
@@ -325,6 +327,8 @@ int main( int argc, char *argv[] )
 					close(client_socket);
 					flag = 0;
 				}
+				else
+					printf("Result is sent\n");
 				may_answer = 1;
 				free(slaves_tasks);
 				free(slaves_ids);
