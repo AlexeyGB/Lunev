@@ -39,12 +39,6 @@ typedef struct
 
 typedef struct 
 {
-	int threads_amount;
-	char msg[15];
-}server_answer_t;
-
-typedef struct 
-{
 	double from;
 	double to;
 	double delta;
@@ -71,6 +65,11 @@ double integr_simp( double from, double to )
 	integral = (to-from)/6 * ( f(from) + 4 * f( (from+to)/2 ) + f(to) );
 	return integral;
 };
+
+void thread_cancel(int signo)
+{
+  pthread_exit(PTHREAD_CANCELED);
+}
 
 /*func for thread answers to broadcast requests*/
 void *brcast_communicator( void *arg )
@@ -102,10 +101,7 @@ void *brcast_communicator( void *arg )
 	size_t msg_size = sizeof(char)*15;
 	char msg_rcv[15];
 	memset( &msg_rcv, 0, msg_size );
-	server_answer_t msg_snd;
-	memset( &msg_snd.msg, 0, msg_size );
-	strcpy( msg_snd.msg, "Hello, client!");
-	msg_snd.threads_amount = slaves_amount;
+	int msg_snd = slaves_amount;
 	size_t rcv_size;
 
 	struct sockaddr_in client_addr;
@@ -114,14 +110,17 @@ void *brcast_communicator( void *arg )
 
 	while(1)
 	{
+		memset( &msg_rcv, 0, msg_size );
 		if( poll( &fds, 1, -1 ) == -1 )
 			handle_cr_error("Poll broadcast socket failed");
 		/*recieve from UDP socket*/
 		if( (rcv_size = recvfrom( brcast_socket, msg_rcv, msg_size, MSG_TRUNC, (struct sockaddr*) &client_addr, &client_addr_len )) == -1 )
 			handle_cr_error("Recv from broadcast socket failed");
 		/*answer*/
+		//printf("Recieved %s\n", msg_rcv);//debug
 		if( rcv_size == 15 && strcmp( msg_rcv, "Hello, server!") == 0 && *may_answer == 1 )
 		{	
+			//printf("Send %d\n", msg_snd);//debug
 			if( sendto( brcast_socket, &msg_snd, sizeof(msg_snd), 0, (struct sockaddr*) &client_addr, client_addr_len ) == -1 )
 				handle_cr_error("Sendto from broadcast socket");
 		}
@@ -136,12 +135,25 @@ void *checker( void *arg )
 {
 	checker_task_t *task = (checker_task_t *) arg;
 
+	int optval = 1;
+	if( setsockopt( task->socket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) == -1 )
+		handle_cr_error("setsockopt"); 
+	optval = 1;
+	if( setsockopt( task->socket, IPPROTO_TCP, TCP_KEEPIDLE, &optval, sizeof(optval)) == -1 )
+		handle_cr_error("setsockopt"); 
+	optval = 1;
+	if( setsockopt( task->socket, IPPROTO_TCP, TCP_KEEPINTVL, &optval, sizeof(optval)) == -1 )
+		handle_cr_error("setsockopt"); 
+	optval = 1;
+	if( setsockopt( task->socket, IPPROTO_TCP, TCP_KEEPCNT, &optval, sizeof(optval)) == -1 )
+		handle_cr_error("setsockopt");
+
 	char msg[20];
 	recv( task->socket, &msg, sizeof(char) * 20, 0 );
-
+	//printf("Client disconnected [checker]\n");//debug
 	for( int i = 0; i < task->slaves_amount; i++ )
-		pthread_cancel( task->slave_threads[i] );
-
+		//pthread_cancel( task->slave_threads[i] );
+		pthread_kill(task->slave_threads[i], SIGUSR1);
 	return NULL;
 }
 
@@ -178,6 +190,13 @@ int main( int argc, char *argv[] )
 		exit( EXIT_FAILURE );
 	} 
 	printf("***Server started***\n");
+	
+	struct sigaction cancel_act;
+  	memset(&cancel_act, 0, sizeof(cancel_act));
+  	cancel_act.sa_handler = thread_cancel;
+  	sigfillset(&cancel_act.sa_mask);
+  	sigaction(SIGUSR1, &cancel_act, NULL);
+	
 	/*start thread to be answering to broadcast requests*/
 	int may_answer = 0; 
 	pthread_t broadcast_thr;
@@ -263,7 +282,9 @@ int main( int argc, char *argv[] )
 			flag = 0;
 			may_answer = 1;
 		}
-		printf("Task recieved\nStart calculations...");
+		printf("Task recieved\n");
+		printf("Start calculations...\n");
+		fflush(stdout);
 		/*calculations*/
 		if( flag )
 		{
@@ -297,6 +318,7 @@ int main( int argc, char *argv[] )
 			int *exit_status;
 			for( int i = 0; i < slaves_amount; i++ )
 			{
+
 				pthread_join( slaves_ids[i], (void *) &exit_status);
 				if( exit_status == PTHREAD_CANCELED )
 					slaves_canceled = 1; //slaves were canceled
@@ -304,7 +326,7 @@ int main( int argc, char *argv[] )
 			/*check why slaves exited*/			
 			if( slaves_canceled == 1 )
 			{
-				handle_error("Client disconnected");
+				printf("Client disconnected\n");
 				close(client_socket);
 				flag = 0;
 				may_answer = 1;
