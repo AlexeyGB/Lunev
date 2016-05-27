@@ -167,7 +167,9 @@ int main(int argc, char const *argv[])
 	{
 		memset( &msg_rcv, 0, sizeof(msg_rcv) );
 		//printf("Have input on brcast\n");
-		int recv_bytes = recvfrom( brcast_socket, &msg_rcv, sizeof(msg_rcv), MSG_TRUNC, (struct sockaddr *) &servers[servers_amount].addr, &serv_addr_len );
+		int recv_bytes = recvfrom( brcast_socket, &msg_rcv, sizeof(msg_rcv), 
+								   MSG_TRUNC, (struct sockaddr *) &servers[servers_amount].addr,
+								   &serv_addr_len );
 		//printf("Recieved %d\n", msg_rcv);
 		if( recv_bytes == sizeof(msg_rcv) && msg_rcv > 0 )
 		{
@@ -197,13 +199,15 @@ int main(int argc, char const *argv[])
 		printf("Servers found: %d\n", servers_amount);
 
 	/*set tasks and start communicators*/
+	time_t begin, end;
+	begin = time(NULL);
 	printf("Send tasks\n");
 	communicator_task_t *communicators_tasks = (communicator_task_t *) malloc( sizeof(communicator_task_t)*servers_amount );
 	if( communicators_tasks == NULL )
 		handle_cr_error("Malloc failed");
 	pthread_t *communicators_ids = (pthread_t *) malloc( sizeof(pthread_t) * servers_amount );
 	double part_length = (to - from) / all_threads_amount; 
-	printf("threads at all %d\n", all_threads_amount);//debug
+	//printf("threads at all %d\n", all_threads_amount);//debug
 	for( int i = 0; i < servers_amount; i++ )
 	{
 		communicators_tasks[i].from = from;
@@ -211,21 +215,22 @@ int main(int argc, char const *argv[])
 		communicators_tasks[i].delta = delta;
 		communicators_tasks[i].server_addr = &servers[i].addr;
 		from += servers[i].threads_on_server*part_length;
-		printf("threads: %d", servers[i].threads_on_server);
-		printf("server %d from %g to %g delta %g\n", i+1, communicators_tasks[i].from, communicators_tasks[i].to, communicators_tasks[i].delta);//debug
+		//printf("threads: %d", servers[i].threads_on_server);
+		//printf("server %d from %g to %g delta %g\n", i+1, communicators_tasks[i].from, communicators_tasks[i].to, communicators_tasks[i].delta);//debug
 		if( pthread_create( &communicators_ids[i], NULL, communicator, (void *) &communicators_tasks[i]) == -1 )
 			handle_cr_error("Can't create thread");
 	}
 
 	printf("Waiting for results...\n");
 	/*wait for communicators threads and sum results*/
-	double result;
+	double result = 0;
 	for( int i = 0; i < servers_amount; i++ )
 	{
 		pthread_join( communicators_ids[i], NULL );
 		result += communicators_tasks[i].result;
 	}
-
+	end = time(NULL);
+	fprintf(stdout, "time: %ld s\n", end - begin);
 	fprintf(stdout, "Result %g\n", result);
 
 	free(communicators_ids);
